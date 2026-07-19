@@ -136,24 +136,45 @@ describe('TokenizeArgString', function () {
   })
 
   it('handles ANSI-C quoted strings', function () {
-    const args = tokenizeArgString(['--string', "$'text with \\n newline'"])
+    const args = tokenizeArgString("--string $'text with \\n newline'")
     strictEqual(args[0], '--string')
-    strictEqual(args[1], '\'text with \n newline\'')
+    strictEqual(args[1], 'text with \n newline')
   })
 
   it('handles ANSI-C quoted strings as equals declarations', function () {
-    const args = tokenizeArgString(["--string=$'text with \\n newline'"])
-    strictEqual(args[0], '--string=\'text with \n newline\'')
+    const args = tokenizeArgString("--string=$'text with \\n newline'")
+    strictEqual(args[0], '--string=text with \n newline')
   })
 
   it('handles ANSI-C quoted strings with silently stripped characters', function () {
-    const args = tokenizeArgString(["$'\\b\\f'"])
-    strictEqual(args[0], '\'\b\f\'')
+    const args = tokenizeArgString("$'\\b\\f'")
+    strictEqual(args[0], '\b\f')
+  })
+
+  it('does not reinterpret already-tokenized array values', function () {
+    const args = tokenizeArgString(['--string', "$'text with \\n newline'"])
+    strictEqual(args[1], "$'text with \\n newline'")
+  })
+
+  it('does not activate ANSI-C quoting inside double quotes', function () {
+    const args = tokenizeArgString("--string \"$'text with \\n newline'\"")
+    strictEqual(args[1], "\"$'text with \\n newline'\"")
+  })
+
+  it('decodes escapes from left to right', function () {
+    const args = tokenizeArgString("$'\\a\\t\\\\n'")
+    strictEqual(args[0], '\x07\t\\n')
+  })
+
+  it('joins adjacent quoted and unquoted segments', function () {
+    const args = tokenizeArgString("$'a\\n'b $'a'$'b'")
+    strictEqual(args[0], 'a\nb')
+    strictEqual(args[1], 'ab')
   })
 
   it('handles ANSI-C quoted strings in real curl example', function () {
     const args = tokenizeArgString('curl \'http://localhost:3001\' -H \'Content-Type: multipart/form-data; boundary=---------------------------22070739573223388867407661007\' --data-binary $\'-----------------------------22070739573223388867407661007\\r\\nContent-Disposition: form-data; name="caseid"\\r\\n\\r\\n165646\\r\\n-----------------------------22070739573223388867407661007--\\r\\n\'')
-    const expected = '\'-----------------------------22070739573223388867407661007\r\nContent-Disposition: form-data; name="caseid"\r\n\r\n165646\r\n-----------------------------22070739573223388867407661007--\r\n\''
+    const expected = '-----------------------------22070739573223388867407661007\r\nContent-Disposition: form-data; name="caseid"\r\n\r\n165646\r\n-----------------------------22070739573223388867407661007--\r\n'
     strictEqual(args[5], expected)
   })
 })

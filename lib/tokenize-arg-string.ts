@@ -10,35 +10,93 @@
  * Original issue report: https://github.com/NickCarneiro/curlconverter/issues/207
  */
 export function escapeAnsiString (str: string): string {
-  return str
-    .replace(/\\'/g, "'")
-    .replace(/\\"/g, '"')
-    .replace(/\\\?/g, '?')
-    .replace(/\\a/g, '\a') // eslint-disable-line
-    .replace(/\\b/g, '\b')
-    .replace(/\\f/g, '\f')
-    .replace(/\\v/g, '\v')
-    .replace(/\\r/g, '\r')
-    .replace(/\\n/g, '\n')
-    .replace(/\\\\/g, '\\')
+  const escapes: Record<string, string> = {
+    "'": "'",
+    '"': '"',
+    '?': '?',
+    a: '\x07',
+    b: '\b',
+    f: '\f',
+    n: '\n',
+    r: '\r',
+    t: '\t',
+    v: '\v',
+    '\\': '\\'
+  }
+
+  return str.replace(/\\(['"?\\abfnrtv])/g, (_, char: string) => escapes[char])
 }
 
-const ANSI_REGEX = /\$('.*')/s
-export function escapeAnsiCQuotes (stringArr: string[]): string[] {
-  return (stringArr || []).map(str => {
-    const match = (str || '').match(ANSI_REGEX)
-    if (match && match.length > 1) {
-      const matchGroup = match[1]
-      return str.replace(ANSI_REGEX, escapeAnsiString(matchGroup))
+function expandAnsiCQuotes (str: string): string {
+  let result = ''
+  let opening: "'" | '"' | null = null
+
+  for (let i = 0; i < str.length;) {
+    const char = str.charAt(i)
+
+    if (opening) {
+      result += char
+
+      if (opening === '"' && char === '\\' && i + 1 < str.length) {
+        result += str.charAt(i + 1)
+        i += 2
+        continue
+      }
+
+      if (char === opening) opening = null
+      i++
+      continue
     }
-    return str
-  })
+
+    if (char === '"' || char === "'") {
+      opening = char
+      result += char
+      i++
+      continue
+    }
+
+    if (char !== '$' || str.charAt(i + 1) !== "'") {
+      result += char
+      i++
+      continue
+    }
+
+    const segmentStart = i
+    let content = ''
+    i += 2
+
+    while (i < str.length && str.charAt(i) !== "'") {
+      const contentChar = str.charAt(i)
+      content += contentChar
+
+      if (contentChar === '\\' && i + 1 < str.length) {
+        content += str.charAt(i + 1)
+        i += 2
+      } else {
+        i++
+      }
+    }
+
+    if (i === str.length) {
+      result += str.slice(segmentStart)
+      break
+    }
+
+    result += escapeAnsiString(content)
+    i++
+  }
+
+  return result
+}
+
+export function escapeAnsiCQuotes (stringArr: string[]): string[] {
+  return (stringArr || []).map(str => expandAnsiCQuotes(str || ''))
 }
 
 // take an un-split argv string and tokenize it.
 export function tokenizeArgString (argString: string | any[]): string[] {
   if (Array.isArray(argString)) {
-    return escapeAnsiCQuotes(argString.map(e => typeof e !== 'string' ? e + '' : e))
+    return argString.map(e => typeof e !== 'string' ? e + '' : e)
   }
 
   argString = argString.trim()
